@@ -1,21 +1,33 @@
 #!/usr/bin/env python3
-"""
-create a web cach
-"""
+""" Module to implement web caching and tracking using Redis """
 import redis
 import requests
-rc = redis.Redis()
-count = 0
+from typing import Callable
+
+r = redis.Redis()
 
 
+def count_url_access(method: Callable) -> Callable:
+    """Decorator to count URL accesses and cache results."""
+    def wrapper(url: str) -> str:
+        """Wrapper that tracks URL access and caches content."""
+        cache_key = f"cached:{url}"
+        count_key = f"count:{url}"
+
+        r.incr(count_key)
+        cached = r.get(cache_key)
+        if cached:
+            return cached.decode('utf-8')
+
+        # Fetch and cache new content
+        response = method(url)
+        r.setex(cache_key, 10, response)
+        return response
+    return wrapper
+
+
+@count_url_access
 def get_page(url: str) -> str:
-    """ get a page and cach value"""
-    rc.set(f"cached:{url}", count)
-    resp = requests.get(url)
-    rc.incr(f"count:{url}")
-    rc.setex(f"cached:{url}", 10, rc.get(f"cached:{url}"))
-    return resp.text
-
-
-if __name__ == "__main__":
-    get_page('http://slowwly.robertomurray.co.uk')
+    """Get and return the HTML content of a URL."""
+    response = requests.get(url)
+    return response.text
